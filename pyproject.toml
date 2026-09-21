@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "transcript-tool-miner"
+version = "0.1.0"
+description = "Find repeated agent workflows and opportunities for deterministic tools."
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [{name = "Matthew Cosier"}]
+dependencies = []
+
+[project.scripts]
+ttm = "transcript_tool_miner.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]

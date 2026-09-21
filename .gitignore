@@ -1,0 +1,33 @@
+# Never commit local transcripts, including nested directories and rotated logs.
+*.jsonl
+*.jsonl.*
+transcripts/
+history/
+sessions/
+imports/
+private/
+# Local analysis and export artifacts can contain private commands and paths.
+.ttm/
+*.db
+*.db-*
+*.sqlite
+*.sqlite-*
+*.sqlite3
+*.sqlite3-*
+exports/
+reports/
+scan-output/
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.DS_Store
+.coverage
+htmlcov/
