@@ -1,0 +1,120 @@
+[
+  {
+    "_synthetic_fixture": true,
+    "description": "Invented workflow. Contains no real transcript data."
+  },
+  {
+    "type": "session_meta",
+    "payload": {
+      "id": "synthetic-codex-b",
+      "cwd": "/synthetic/repo-b"
+    }
+  },
+  {
+    "type": "event_msg",
+    "payload": {
+      "type": "user_message",
+      "message": "Check the changed example files."
+    }
+  },
+  {
+    "type": "response_item",
+    "payload": {
+      "type": "message",
+      "role": "user",
+      "content": [
+        {
+          "type": "input_text",
+          "text": "Check the changed example files."
+        }
+      ]
+    }
+  },
+  {
+    "type": "response_item",
+    "payload": {
+      "type": "reasoning",
+      "summary": [
+        {
+          "type": "summary_text",
+          "text": "Inspect the synthetic result and continue."
+        }
+      ]
+    }
+  },
+  {
+    "type": "response_item",
+    "payload": {
+      "type": "function_call",
+      "name": "functions.exec_command",
+      "call_id": "call-0",
+      "arguments": "{\"cmd\": \"git diff --name-only HEAD~1\"}"
+    }
+  },
+  {
+    "type": "response_item",
+    "payload": {
+      "type": "function_call_output",
+      "call_id": "call-0",
+      "output": "{\"exit_code\": 0, \"output\": \"src/example.py\\nsrc/example.py\\nsrc/example.py\\nsrc/example.py\\nsrc/example.py\\nsrc/example.py\\nsrc/example.py\\nsrc/example.py\\nsrc/example.py\\nsrc/example.py\\nsrc/example.py\\nsrc/example.py\\nsrc/example.py\\nsrc/example.py\\nsrc/example.py\\nsrc/example.py\\nsrc/example.py\\nsrc/example.py\\nsrc/example.py\\nsrc/example.py\\nsrc/example.py\\nsrc/example.py\\nsrc/example.py\\nsrc/example.py\\nsrc/example.py\\nsrc/example.py\\nsrc/example.py\\nsrc/example.py\\nsrc/example.py\\nsrc/example.py\\nsrc/example.py\\nsrc/example.py\\nsrc/example.py\\nsrc/example.py\\nsrc/example.py\\nsrc/example.py\\nsrc/example.py\\nsrc/example.py\\nsrc/example.py\\nsrc/example.py\\nsrc/example.py\\nsrc/example.py\\nsrc/example.py\\nsrc/example.py\\nsrc/example.py\\nsrc/example.py\\nsrc/example.py\\nsrc/example.py\\nsrc/example.py\\nsrc/example.py\\nsrc/example.py\\nsrc/example.py\\nsrc/example.py\\nsrc/example.py\\nsrc/example.py\\nsrc/example.py\\nsrc/example.py\\nsrc/example.py\\nsrc/example.py\\nsrc/example.py\\nsrc/example.py\\nsrc/example.py\\nsrc/example.py\\nsrc/example.py\\nsrc/example.py\\nsrc/example.py\\nsrc/example.py\\nsrc/example.py\\nsrc/example.py\\nsrc/example.py\\nsrc/example.py\\nsrc/example.py\\nsrc/example.py\\nsrc/example.py\\nsrc/example.py\\nsrc/example.py\\nsrc/example.py\\nsrc/example.py\\nsrc/example.py\\nsrc/example.py\\nsrc/example.py\\nsrc/example.py\\nsrc/example.py\\nsrc/example.py\\nsrc/example.py\\nsrc/example.py\\nsrc/example.py\\nsrc/example.py\\nsrc/example.py\\nsrc/example.py\\nsrc/example.py\\nsrc/example.py\\nsrc/example.py\\nsrc/example.py\\nsrc/example.py\\nsrc/example.py\\nsrc/example.py\\nsrc/example.py\\nsrc/example.py\\nsrc/example.py\\n\"}"
+    }
+  },
+  {
+    "type": "response_item",
+    "payload": {
+      "type": "reasoning",
+      "summary": [
+        {
+          "type": "summary_text",
+          "text": "Inspect the synthetic result and continue."
+        }
+      ]
+    }
+  },
+  {
+    "type": "response_item",
+    "payload": {
+      "type": "function_call",
+      "name": "functions.exec_command",
+      "call_id": "call-1",
+      "arguments": "{\"cmd\": \"rg --files tests\"}"
+    }
+  },
+  {
+    "type": "response_item",
+    "payload": {
+      "type": "function_call_output",
+      "call_id": "call-1",
+      "output": "{\"exit_code\": 0, \"output\": \"tests/test_example.py\\ntests/test_example.py\\ntests/test_example.py\\ntests/test_example.py\\ntests/test_example.py\\ntests/test_example.py\\ntests/test_example.py\\ntests/test_example.py\\ntests/test_example.py\\ntests/test_example.py\\ntests/test_example.py\\ntests/test_example.py\\ntests/test_example.py\\ntests/test_example.py\\ntests/test_example.py\\ntests/test_example.py\\ntests/test_example.py\\ntests/test_example.py\\ntests/test_example.py\\ntests/test_example.py\\ntests/test_example.py\\ntests/test_example.py\\ntests/test_example.py\\ntests/test_example.py\\ntests/test_example.py\\ntests/test_example.py\\ntests/test_example.py\\ntests/test_example.py\\ntests/test_example.py\\ntests/test_example.py\\ntests/test_example.py\\ntests/test_example.py\\ntests/test_example.py\\ntests/test_example.py\\ntests/test_example.py\\ntests/test_example.py\\ntests/test_example.py\\ntests/test_example.py\\ntests/test_example.py\\ntests/test_example.py\\ntests/test_example.py\\ntests/test_example.py\\ntests/test_example.py\\ntests/test_example.py\\ntests/test_example.py\\ntests/test_example.py\\ntests/test_example.py\\ntests/test_example.py\\ntests/test_example.py\\ntests/test_example.py\\ntests/test_example.py\\ntests/test_example.py\\ntests/test_example.py\\ntests/test_example.py\\ntests/test_example.py\\ntests/test_example.py\\ntests/test_example.py\\ntests/test_example.py\\ntests/test_example.py\\ntests/test_example.py\\ntests/test_example.py\\ntests/test_example.py\\ntests/test_example.py\\ntests/test_example.py\\ntests/test_example.py\\ntests/test_example.py\\ntests/test_example.py\\ntests/test_example.py\\ntests/test_example.py\\ntests/test_example.py\\ntests/test_example.py\\ntests/test_example.py\\ntests/test_example.py\\ntests/test_example.py\\ntests/test_example.py\\ntests/test_example.py\\ntests/test_example.py\\ntests/test_example.py\\ntests/test_example.py\\ntests/test_example.py\\ntests/test_example.py\\ntests/test_example.py\\ntests/test_example.py\\ntests/test_example.py\\ntests/test_example.py\\ntests/test_example.py\\ntests/test_example.py\\ntests/test_example.py\\ntests/test_example.py\\ntests/test_example.py\\ntests/test_example.py\\ntests/test_example.py\\ntests/test_example.py\\ntests/test_example.py\\ntests/test_example.py\\ntests/test_example.py\\ntests/test_example.py\\ntests/test_example.py\\ntests/test_example.py\\ntests/test_example.py\\n\"}"
+    }
+  },
+  {
+    "type": "response_item",
+    "payload": {
+      "type": "reasoning",
+      "summary": [
+        {
+          "type": "summary_text",
+          "text": "Inspect the synthetic result and continue."
+        }
+      ]
+    }
+  },
+  {
+    "type": "response_item",
+    "payload": {
+      "type": "function_call",
+      "name": "functions.exec_command",
+      "call_id": "call-2",
+      "arguments": "{\"cmd\": \"pytest tests/test_example.py\"}"
+    }
+  },
+  {
+    "type": "response_item",
+    "payload": {
+      "type": "function_call_output",
+      "call_id": "call-2",
+      "output": "{\"exit_code\": 0, \"output\": \"2 passed in 0.1s\"}"
+    }
+  }
+]
