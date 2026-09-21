@@ -31,3 +31,7 @@ dist/
 .DS_Store
 .coverage
 htmlcov/
+# Case variants and legacy Codex rollouts are private too.
+*.[jJ][sS][oO][nN][lL]
+*.[jJ][sS][oO][nN][lL].*
+rollout-*.json
