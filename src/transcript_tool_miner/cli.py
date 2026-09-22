@@ -8,8 +8,9 @@ import sqlite3
 import sys
 from . import __version__
 from .export import markdown, package
-from .miner import analyse
+from .miner import analyse, corpus_report, report_markdown
 from .storage import candidates, connect, get_candidate, scan
+from .usage import audit_model_calls
 
 
 def default_paths(claude=False, codex=False):
@@ -28,7 +29,7 @@ def default_paths(claude=False, codex=False):
 
 def parser():
     shared = argparse.ArgumentParser(add_help=False)
-    shared.add_argument("--db", default=argparse.SUPPRESS, help="SQLite path (default: .ttm/miner.sqlite3)")
+    shared.add_argument("--db", default=argparse.SUPPRESS, help="SQLite path (default: user state directory, outside the checkout)")
     root = argparse.ArgumentParser(prog="ttm", description="Find deterministic tool opportunities in local agent transcripts.", parents=[shared])
     root.add_argument("--version", action="version", version=__version__)
     commands = root.add_subparsers(dest="operation", required=True)
@@ -38,6 +39,7 @@ def parser():
     ingest.add_argument("--codex", action="store_true")
     ingest.add_argument("--source", choices=["claude", "codex"], help="Force adapter for explicit paths (default: detect)")
     ingest.add_argument("--matchers", help="JSON array of custom action/pattern rules")
+    ingest.add_argument("--workers", type=int, default=1, help="Bounded parse workers (1..8; try 4 for large corpora)")
     ingest.add_argument("--json", action="store_true", help="Machine-readable scan summary")
     analysis = commands.add_parser("analyse", aliases=["analyze"], parents=[shared], help="Mine and score repeated sequences")
     analysis.add_argument("--min-length", type=int, default=2)
@@ -45,10 +47,15 @@ def parser():
     analysis.add_argument("--min-occurrences", type=int, default=2)
     analysis.add_argument("--min-sessions", type=int, default=2)
     analysis.add_argument("--result-budget", type=int, default=200, help="Conservative concise-result allowance in tokens")
-    analysis.add_argument("--keep-nested", action="store_true", help="Include fully covered subpatterns")
+    analysis.add_argument("--model-usage", action="store_true", help="Audit recorded API usage on exact repeated plans and completed-process polling; may reread relevant source files")
+    analysis.add_argument("--include-exploratory", action="store_true", help="Include families with zero replay-supported savings")
+    analysis.add_argument("--keep-nested", action="store_true", help="Deprecated compatibility flag; variants are grouped into families")
     listing = commands.add_parser("candidates", parents=[shared], help="Show ranked opportunities")
     listing.add_argument("--json", action="store_true")
     listing.add_argument("--limit", type=int, default=20)
+    report = commands.add_parser("report", parents=[shared], help="Show deduplicated counterfactual corpus token savings")
+    report.add_argument("--format", choices=["markdown", "json"], default="markdown")
+    report.add_argument("--output", "-o", help="Write a new private report file; refuses overwrite")
     detail = commands.add_parser("candidate", parents=[shared])
     actions = detail.add_subparsers(dest="candidate_operation", required=True)
     for name in ("show", "export"):
@@ -71,14 +78,15 @@ def write_private(path, text):
 
 def main(argv=None):
     args = parser().parse_args(argv)
-    db_path = getattr(args, "db", os.environ.get("TTM_DB", ".ttm/miner.sqlite3"))
+    state = Path(os.environ.get('XDG_STATE_HOME', Path.home()/'.local/state'))
+    db_path = getattr(args, 'db', os.environ.get('TTM_DB', str(state/'transcript-tool-miner/miner.sqlite3')))
     try:
         with connect(db_path) as db:
             if args.operation == "scan":
                 paths = args.paths or default_paths(args.claude, args.codex)
                 if not paths:
                     raise ValueError("No transcript sources found. Pass an explicit file or directory.")
-                summary = scan(db, paths, source=args.source, matchers=args.matchers)
+                summary = scan(db, paths, source=args.source, matchers=args.matchers, workers=args.workers)
                 if args.json:
                     print(json.dumps(summary, indent=2))
                 else:
@@ -91,8 +99,19 @@ def main(argv=None):
                         print("Run ttm analyse to refresh candidates.")
                 return 1 if summary["errors"] else 0
             if args.operation in {"analyse", "analyze"}:
-                result = analyse(db, **{key: getattr(args, key) for key in ("min_length", "max_length", "min_occurrences", "min_sessions", "result_budget", "keep_nested")})
+                result = analyse(db, **{key: getattr(args, key) for key in ("min_length", "max_length", "min_occurrences", "min_sessions", "result_budget", "keep_nested", "include_exploratory")})
+                if args.model_usage:
+                    usage = audit_model_calls(db)
+                    print(f"Audited recorded usage on {usage['gross_historical_call_exposure']['model_calls']} narrowly eligible model calls.")
                 print(f"Found {len(result)} candidates. Run ttm candidates to see rankings.")
+            elif args.operation == "report":
+                report = corpus_report(db)
+                rendered = json.dumps(report, indent=2) if args.format == "json" else report_markdown(report)
+                if args.output:
+                    write_private(args.output, rendered)
+                    print(f"Report written to {args.output}")
+                else:
+                    print(rendered)
             elif args.operation == "candidates":
                 if args.limit < 1:
                     raise ValueError("--limit must be positive")
@@ -104,10 +123,10 @@ def main(argv=None):
                 elif not rows:
                     print("No candidates. Run ttm scan then ttm analyse; by default a sequence must occur in two distinct sessions.")
                 else:
-                    print(f"{'ID':12}  {'Occurrences':>11}  {'Projects':>8}  {'Avg tokens~':>11}  {'Score~':>12}  Candidate")
+                    print(f"{'ID':12}  {'Occurrences':>11}  {'Projects':>8}  {'Reduction~':>11}  {'Score~':>12}  Candidate")
                     for c in rows:
-                        print(f"{c['id']}  {c['occurrences']:>11}  {c['project_count']:>8}  {c['average_intermediate_tokens']:>11,.0f}  {c['score']:>12,.0f}  {c['name']}")
-                    print("~ Estimates, not measured savings. Scores and savings overlap across candidates.")
+                        print(f"{c['id']}  {c['occurrences']:>11}  {c['project_count']:>8}  {c['modeled_tool_output_reduction_tokens']:>11,.0f}  {c['score']:>12,.0f}  {c['name']}")
+                    print("~ Counterfactual output reductions, not billing savings. Run ttm report for deduplicated totals.")
             else:
                 bundle = package(get_candidate(db, args.id), args.include_sensitive)
                 rendered = json.dumps(bundle, indent=2) if args.format == "json" else markdown(bundle)

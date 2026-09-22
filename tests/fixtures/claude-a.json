@@ -28,7 +28,7 @@
           "id": "call-0",
           "name": "Bash",
           "input": {
-            "command": "git diff --name-only HEAD"
+            "command": "pytest tests/test_example.py"
           }
         }
       ]
@@ -42,7 +42,7 @@
         {
           "type": "tool_result",
           "tool_use_id": "call-0",
-          "content": "src/example.py\nsrc/example.py\nsrc/example.py\nsrc/example.py\nsrc/example.py\nsrc/example.py\nsrc/example.py\nsrc/example.py\nsrc/example.py\nsrc/example.py\nsrc/example.py\nsrc/example.py\nsrc/example.py\nsrc/example.py\nsrc/example.py\nsrc/example.py\nsrc/example.py\nsrc/example.py\nsrc/example.py\nsrc/example.py\nsrc/example.py\nsrc/example.py\nsrc/example.py\nsrc/example.py\nsrc/example.py\nsrc/example.py\nsrc/example.py\nsrc/example.py\nsrc/example.py\nsrc/example.py\nsrc/example.py\nsrc/example.py\nsrc/example.py\nsrc/example.py\nsrc/example.py\nsrc/example.py\nsrc/example.py\nsrc/example.py\nsrc/example.py\nsrc/example.py\nsrc/example.py\nsrc/example.py\nsrc/example.py\nsrc/example.py\nsrc/example.py\nsrc/example.py\nsrc/example.py\nsrc/example.py\nsrc/example.py\nsrc/example.py\nsrc/example.py\nsrc/example.py\nsrc/example.py\nsrc/example.py\nsrc/example.py\nsrc/example.py\nsrc/example.py\nsrc/example.py\nsrc/example.py\nsrc/example.py\nsrc/example.py\nsrc/example.py\nsrc/example.py\nsrc/example.py\nsrc/example.py\nsrc/example.py\nsrc/example.py\nsrc/example.py\nsrc/example.py\nsrc/example.py\nsrc/example.py\nsrc/example.py\nsrc/example.py\nsrc/example.py\nsrc/example.py\nsrc/example.py\nsrc/example.py\nsrc/example.py\nsrc/example.py\nsrc/example.py\nsrc/example.py\nsrc/example.py\nsrc/example.py\nsrc/example.py\nsrc/example.py\nsrc/example.py\nsrc/example.py\nsrc/example.py\nsrc/example.py\nsrc/example.py\nsrc/example.py\nsrc/example.py\nsrc/example.py\nsrc/example.py\nsrc/example.py\nsrc/example.py\nsrc/example.py\nsrc/example.py\nsrc/example.py\nsrc/example.py\n",
+          "content": "test_example_0 PASSED\ntest_example_1 PASSED\ntest_example_2 PASSED\ntest_example_3 PASSED\ntest_example_4 PASSED\ntest_example_5 PASSED\ntest_example_6 PASSED\ntest_example_7 PASSED\ntest_example_8 PASSED\ntest_example_9 PASSED\ntest_example_10 PASSED\ntest_example_11 PASSED\ntest_example_12 PASSED\ntest_example_13 PASSED\ntest_example_14 PASSED\ntest_example_15 PASSED\ntest_example_16 PASSED\ntest_example_17 PASSED\ntest_example_18 PASSED\ntest_example_19 PASSED\ntest_example_20 PASSED\ntest_example_21 PASSED\ntest_example_22 PASSED\ntest_example_23 PASSED\ntest_example_24 PASSED\ntest_example_25 PASSED\ntest_example_26 PASSED\ntest_example_27 PASSED\ntest_example_28 PASSED\ntest_example_29 PASSED\ntest_example_30 PASSED\ntest_example_31 PASSED\ntest_example_32 PASSED\ntest_example_33 PASSED\ntest_example_34 PASSED\ntest_example_35 PASSED\ntest_example_36 PASSED\ntest_example_37 PASSED\ntest_example_38 PASSED\ntest_example_39 PASSED\ntest_example_40 PASSED\ntest_example_41 PASSED\ntest_example_42 PASSED\ntest_example_43 PASSED\ntest_example_44 PASSED\ntest_example_45 PASSED\ntest_example_46 PASSED\ntest_example_47 PASSED\ntest_example_48 PASSED\ntest_example_49 PASSED\ntest_example_50 PASSED\ntest_example_51 PASSED\ntest_example_52 PASSED\ntest_example_53 PASSED\ntest_example_54 PASSED\ntest_example_55 PASSED\ntest_example_56 PASSED\ntest_example_57 PASSED\ntest_example_58 PASSED\ntest_example_59 PASSED\ntest_example_60 PASSED\ntest_example_61 PASSED\ntest_example_62 PASSED\ntest_example_63 PASSED\ntest_example_64 PASSED\ntest_example_65 PASSED\ntest_example_66 PASSED\ntest_example_67 PASSED\ntest_example_68 PASSED\ntest_example_69 PASSED\ntest_example_70 PASSED\ntest_example_71 PASSED\ntest_example_72 PASSED\ntest_example_73 PASSED\ntest_example_74 PASSED\ntest_example_75 PASSED\ntest_example_76 PASSED\ntest_example_77 PASSED\ntest_example_78 PASSED\ntest_example_79 PASSED\ntest_example_80 PASSED\ntest_example_81 PASSED\ntest_example_82 PASSED\ntest_example_83 PASSED\ntest_example_84 PASSED\ntest_example_85 PASSED\ntest_example_86 PASSED\ntest_example_87 PASSED\ntest_example_88 PASSED\ntest_example_89 PASSED\ntest_example_90 PASSED\ntest_example_91 PASSED\ntest_example_92 PASSED\ntest_example_93 PASSED\ntest_example_94 PASSED\ntest_example_95 PASSED\ntest_example_96 PASSED\ntest_example_97 PASSED\ntest_example_98 PASSED\ntest_example_99 PASSED\ntest_example_100 PASSED\ntest_example_101 PASSED\ntest_example_102 PASSED\ntest_example_103 PASSED\ntest_example_104 PASSED\ntest_example_105 PASSED\ntest_example_106 PASSED\ntest_example_107 PASSED\ntest_example_108 PASSED\ntest_example_109 PASSED\ntest_example_110 PASSED\ntest_example_111 PASSED\ntest_example_112 PASSED\ntest_example_113 PASSED\ntest_example_114 PASSED\ntest_example_115 PASSED\ntest_example_116 PASSED\ntest_example_117 PASSED\ntest_example_118 PASSED\ntest_example_119 PASSED\ntest_example_120 PASSED\ntest_example_121 PASSED\ntest_example_122 PASSED\ntest_example_123 PASSED\ntest_example_124 PASSED\ntest_example_125 PASSED\ntest_example_126 PASSED\ntest_example_127 PASSED\ntest_example_128 PASSED\ntest_example_129 PASSED\ntest_example_130 PASSED\ntest_example_131 PASSED\ntest_example_132 PASSED\ntest_example_133 PASSED\ntest_example_134 PASSED\ntest_example_135 PASSED\ntest_example_136 PASSED\ntest_example_137 PASSED\ntest_example_138 PASSED\ntest_example_139 PASSED\ntest_example_140 PASSED\ntest_example_141 PASSED\ntest_example_142 PASSED\ntest_example_143 PASSED\ntest_example_144 PASSED\ntest_example_145 PASSED\ntest_example_146 PASSED\ntest_example_147 PASSED\ntest_example_148 PASSED\ntest_example_149 PASSED\ntest_example_150 PASSED\ntest_example_151 PASSED\ntest_example_152 PASSED\ntest_example_153 PASSED\ntest_example_154 PASSED\ntest_example_155 PASSED\ntest_example_156 PASSED\ntest_example_157 PASSED\ntest_example_158 PASSED\ntest_example_159 PASSED\ntest_example_160 PASSED\ntest_example_161 PASSED\ntest_example_162 PASSED\ntest_example_163 PASSED\ntest_example_164 PASSED\ntest_example_165 PASSED\ntest_example_166 PASSED\ntest_example_167 PASSED\ntest_example_168 PASSED\ntest_example_169 PASSED\ntest_example_170 PASSED\ntest_example_171 PASSED\ntest_example_172 PASSED\ntest_example_173 PASSED\ntest_example_174 PASSED\ntest_example_175 PASSED\ntest_example_176 PASSED\ntest_example_177 PASSED\ntest_example_178 PASSED\ntest_example_179 PASSED\ntest_example_180 PASSED\ntest_example_181 PASSED\ntest_example_182 PASSED\ntest_example_183 PASSED\ntest_example_184 PASSED\ntest_example_185 PASSED\ntest_example_186 PASSED\ntest_example_187 PASSED\ntest_example_188 PASSED\ntest_example_189 PASSED\ntest_example_190 PASSED\ntest_example_191 PASSED\ntest_example_192 PASSED\ntest_example_193 PASSED\ntest_example_194 PASSED\ntest_example_195 PASSED\ntest_example_196 PASSED\ntest_example_197 PASSED\ntest_example_198 PASSED\ntest_example_199 PASSED\n200 passed in 1.0s\n",
           "is_error": false
         }
       ]
@@ -64,7 +64,7 @@
           "id": "call-1",
           "name": "Bash",
           "input": {
-            "command": "rg --files tests"
+            "command": "git status --short"
           }
         }
       ]
@@ -78,7 +78,7 @@
         {
           "type": "tool_result",
           "tool_use_id": "call-1",
-          "content": "tests/test_example.py\ntests/test_example.py\ntests/test_example.py\ntests/test_example.py\ntests/test_example.py\ntests/test_example.py\ntests/test_example.py\ntests/test_example.py\ntests/test_example.py\ntests/test_example.py\ntests/test_example.py\ntests/test_example.py\ntests/test_example.py\ntests/test_example.py\ntests/test_example.py\ntests/test_example.py\ntests/test_example.py\ntests/test_example.py\ntests/test_example.py\ntests/test_example.py\ntests/test_example.py\ntests/test_example.py\ntests/test_example.py\ntests/test_example.py\ntests/test_example.py\ntests/test_example.py\ntests/test_example.py\ntests/test_example.py\ntests/test_example.py\ntests/test_example.py\ntests/test_example.py\ntests/test_example.py\ntests/test_example.py\ntests/test_example.py\ntests/test_example.py\ntests/test_example.py\ntests/test_example.py\ntests/test_example.py\ntests/test_example.py\ntests/test_example.py\ntests/test_example.py\ntests/test_example.py\ntests/test_example.py\ntests/test_example.py\ntests/test_example.py\ntests/test_example.py\ntests/test_example.py\ntests/test_example.py\ntests/test_example.py\ntests/test_example.py\ntests/test_example.py\ntests/test_example.py\ntests/test_example.py\ntests/test_example.py\ntests/test_example.py\ntests/test_example.py\ntests/test_example.py\ntests/test_example.py\ntests/test_example.py\ntests/test_example.py\ntests/test_example.py\ntests/test_example.py\ntests/test_example.py\ntests/test_example.py\ntests/test_example.py\ntests/test_example.py\ntests/test_example.py\ntests/test_example.py\ntests/test_example.py\ntests/test_example.py\ntests/test_example.py\ntests/test_example.py\ntests/test_example.py\ntests/test_example.py\ntests/test_example.py\ntests/test_example.py\ntests/test_example.py\ntests/test_example.py\ntests/test_example.py\ntests/test_example.py\ntests/test_example.py\ntests/test_example.py\ntests/test_example.py\ntests/test_example.py\ntests/test_example.py\ntests/test_example.py\ntests/test_example.py\ntests/test_example.py\ntests/test_example.py\ntests/test_example.py\ntests/test_example.py\ntests/test_example.py\ntests/test_example.py\ntests/test_example.py\ntests/test_example.py\ntests/test_example.py\ntests/test_example.py\ntests/test_example.py\ntests/test_example.py\ntests/test_example.py\n",
+          "content": " M src/example.py\n",
           "is_error": false
         }
       ]
@@ -100,7 +100,7 @@
           "id": "call-2",
           "name": "Bash",
           "input": {
-            "command": "pytest tests/test_example.py"
+            "command": "git diff --check"
           }
         }
       ]
@@ -114,7 +114,7 @@
         {
           "type": "tool_result",
           "tool_use_id": "call-2",
-          "content": "2 passed in 0.1s",
+          "content": "",
           "is_error": false
         }
       ]

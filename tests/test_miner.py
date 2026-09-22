@@ -1,301 +1,261 @@
-import copy
+"""Public parser, persistence, privacy and installed-CLI contracts; invented inputs only."""
+import hashlib
 import json
 import os
 from pathlib import Path
 import shutil
+import sqlite3
 import stat
 import subprocess
 import sys
 import tempfile
+import tracemalloc
 import unittest
+from unittest.mock import patch
 
-from transcript_tool_miner.export import package, markdown, redact
-from transcript_tool_miner.miner import mine, analyse
+from transcript_tool_miner.export import package, markdown
+from transcript_tool_miner.miner import analyse, corpus_report
 from transcript_tool_miner.models import estimate_tokens
 from transcript_tool_miner.normalize import Normalizer
 from transcript_tool_miner.parsers import parse, outcome
-from transcript_tool_miner.storage import connect, scan, candidates, get_candidate
+from transcript_tool_miner.results import compact_validation, result_metadata
+from transcript_tool_miner.storage import connect, scan, candidates, get_candidate, project_identity
+from test_v2 import rollout
 
-FIXTURES = Path(__file__).parent / "fixtures"
-ROOT = Path(__file__).resolve().parents[1]
+FIXTURES=Path(__file__).parent/'fixtures'
+ROOT=Path(__file__).resolve().parents[1]
 
 
 class ParsingTests(unittest.TestCase):
-    def test_both_providers_normalize_to_same_workflow(self):
-        for provider in ("claude", "codex"):
-            with self.subTest(provider=provider):
-                session = parse(FIXTURES / f"{provider}-a.json", Normalizer())
-                self.assertEqual(session.source, provider)
-                self.assertEqual(session.project, "/synthetic/repo-a")
-                self.assertEqual([a.category for a in session.actions], ["git_diff", "find_related_files", "run_tests"])
-                self.assertEqual([a.turn for a in session.actions], [1, 2, 3])
-                self.assertTrue(all(a.success for a in session.actions))
-                self.assertIn("HEAD", session.actions[0].command)
-                self.assertGreater(session.actions[0].output_tokens, 300)
+    def test_providers_preserve_operation_variants_and_turns(self):
+        for provider in ('claude','codex'):
+            s=parse(FIXTURES/f'{provider}-a.json',Normalizer())
+            self.assertEqual(s.source,provider)
+            self.assertEqual(s.project,'/synthetic/repo-a')
+            self.assertEqual([a.category for a in s.actions],['run_tests','git_status','git_diff'])
+            self.assertEqual(s.actions[-1].operations[0]['label'],'git_diff_check')
+            self.assertEqual([a.turn for a in s.actions],[1,2,3])
+            self.assertTrue(all(a.success for a in s.actions))
+            self.assertGreater(s.actions[0].output_tokens,s.actions[0].compact_output_tokens)
+            self.assertEqual(s.digest,hashlib.sha256((FIXTURES/f'{provider}-a.json').read_bytes()).hexdigest())
 
-    def test_jsonl_malformed_and_duplicate_records(self):
-        data = json.loads((FIXTURES / "claude-a.json").read_text())
+    def test_jsonl_partial_tail_and_duplicate_records(self):
+        records=json.loads((FIXTURES/'claude-a.json').read_text())
         with tempfile.TemporaryDirectory() as directory:
-            path = Path(directory) / "fixture.jsonl"
-            path.write_text("\n".join(json.dumps(row) for row in data + [data[2]]) + '\n{"partial":')
-            session = parse(path, Normalizer())
-            self.assertEqual(len(session.actions), 3)
-            self.assertEqual(len(session.warnings), 1)
-            self.assertEqual(session.actions[0].line, 3)
+            path=Path(directory)/'invented.jsonl'
+            path.write_text('\n'.join(json.dumps(r) for r in records+[records[2]])+'\n{"partial":')
+            s=parse(path,Normalizer())
+            self.assertEqual(len(s.actions),3)
+            self.assertEqual(len(s.warnings),1)
+            self.assertEqual(s.actions[0].line,3)
 
-    def test_missing_outcome_is_unknown(self):
-        self.assertIsNone(outcome("looks good"))
-        self.assertIs(outcome("Process exited with code 1"), False)
-        self.assertIs(outcome('{"exit_code": 0}'), True)
-        self.assertIs(outcome("anything", explicit_error=True), False)
-        self.assertIs(outcome("Process exited with code 1", explicit_error=False), False)
-
-    def test_custom_codex_tools_and_unknown_commands_are_retained(self):
-        records = [{"type": "session_meta", "payload": {"id": "synthetic-custom"}},
-                   {"type": "response_item", "payload": {"type": "custom_tool_call", "name": "apply_patch", "call_id": "x", "input": "synthetic patch"}},
-                   {"type": "response_item", "payload": {"type": "custom_tool_call_output", "call_id": "x", "output": "done"}}]
+    def test_event_only_user_boundaries(self):
+        rows=[{'type':'session_meta','payload':{'id':'invented-boundaries'}}]
+        for i,command in enumerate(('pytest tests/a.py','git status')):
+            rows.extend([{'type':'event_msg','payload':{'type':'user_message','message':f'Request {i}'}},
+                         {'type':'response_item','payload':{'type':'function_call','name':'shell','call_id':str(i),'arguments':json.dumps({'command':['bash','-lc',command]})}},
+                         {'type':'response_item','payload':{'type':'function_call_output','call_id':str(i),'output':'Process exited with code 0'}}])
         with tempfile.TemporaryDirectory() as directory:
-            path = Path(directory) / "example.json"
-            path.write_text(json.dumps(records))
-            action = parse(path, Normalizer()).actions[0]
-            self.assertEqual(action.category, "unknown")
-            self.assertEqual(action.command, "synthetic patch")
-            self.assertEqual(action.output_tokens, 1)
-            self.assertIsNone(action.success)
+            p=Path(directory)/'input.json';p.write_text(json.dumps(rows))
+            self.assertEqual([a.request for a in parse(p,Normalizer()).actions],[1,2])
 
-    def test_codex_event_only_requests_split_sequences(self):
-        records = [{"type": "session_meta", "payload": {"id": "synthetic-boundaries"}}]
-        for i, command in enumerate(("git diff", "rg --files")):
-            records += [
-                {"type": "event_msg", "payload": {"type": "user_message", "message": f"Request {i}"}},
-                {"type": "response_item", "payload": {"type": "function_call", "name": "shell", "call_id": str(i), "arguments": json.dumps({"command": ["bash", "-lc", command]})}},
-                {"type": "response_item", "payload": {"type": "function_call_output", "call_id": str(i), "output": "Process exited with code 0"}},
-            ]
+    def test_linked_process_output_and_completion(self):
+        rows=rollout('invented-poll',[]) + [
+            {'type':'response_item','payload':{'type':'function_call','name':'exec_command','call_id':'launch','arguments':'{"cmd":"pytest tests/sample.py"}'}},
+            {'type':'response_item','payload':{'type':'function_call_output','call_id':'launch','output':'{"session_id":42,"output":"started"}'}},
+            {'type':'response_item','payload':{'type':'function_call','name':'write_stdin','call_id':'poll','arguments':'{"session_id":42,"chars":""}'}},
+            {'type':'response_item','payload':{'type':'function_call_output','call_id':'poll','output':json.dumps({'exit_code':0,'output':'passing line\n'*300})}}]
         with tempfile.TemporaryDirectory() as directory:
-            path = Path(directory) / "fixture.json"
-            path.write_text(json.dumps(records))
-            session = parse(path, Normalizer())
-            self.assertEqual([a.request for a in session.actions], [1, 2])
-            self.assertEqual([a.category for a in session.actions], ["git_diff", "find_related_files"])
-            self.assertEqual(session.requests, ["Request 0", "Request 1"])
+            p=Path(directory)/'poll.json';p.write_text(json.dumps(rows));s=parse(p,Normalizer())
+            self.assertEqual(s.actions[1].linked_to,'launch')
+            self.assertIs(s.actions[0].success,True)
+            self.assertEqual(s.actions[1].output_tokens,0)
+            self.assertGreater(s.actions[0].output_tokens,s.actions[0].compact_output_tokens)
+            self.assertEqual(len(s.actions[0].result_lines),2)
 
-    def test_token_estimate_is_visible_character_heuristic(self):
-        self.assertEqual(estimate_tokens(""), 0)
-        self.assertEqual(estimate_tokens("1234"), 1)
-        self.assertEqual(estimate_tokens("12345"), 2)
-        self.assertEqual(estimate_tokens("☃" * 8), 2)
+    def test_token_estimate_and_explicit_outcomes(self):
+        self.assertEqual(estimate_tokens(''),0);self.assertEqual(estimate_tokens('12345'),2)
+        self.assertEqual(estimate_tokens('☃'*8),2)
+        self.assertIsNone(outcome('looks good'))
+        self.assertIs(outcome('Process exited with code 1',False),False)
+        self.assertIs(result_metadata('[{"type":"text","text":"Process exited with code 1"}]',False)[0],False)
 
 
 class NormalizationTests(unittest.TestCase):
-    def test_revisions_runners_and_tool_names(self):
-        normalizer = Normalizer()
-        for command in ("git diff --name-only HEAD", "git diff --name-only HEAD~1", "git -C /synthetic diff"):
-            self.assertEqual(normalizer.classify("Bash", command), "git_diff")
-        for command in ("pytest tests/a.py", "python3 -m pytest tests/b.py", "npm test -- --runInBand", "dotnet test", "cargo test"):
-            self.assertEqual(normalizer.classify("functions.exec_command", command), "run_tests")
-        self.assertEqual(normalizer.classify("Read", '{"file_path":"x.py"}'), "read_file")
-        for command in ("git diff && rm example", "cat x; npm test", "echo $(cat example)", "pytest > log", "cat a\nrm a"):
-            self.assertEqual(normalizer.classify("Bash", command), "unknown")
+    def labels(self,command):
+        return [op.label for op in Normalizer().operations('Bash',{'command':command},'/invented')]
 
-    def test_custom_matcher(self):
+    def test_compounds_preserve_variants_and_quoted_paths(self):
+        normalizer=Normalizer()
+        ops=normalizer.operations('Bash',{'command':'cd "repo with spaces" && git diff --check; git diff --stat; git diff --name-only; git diff'},'/invented')
+        self.assertEqual([o.label for o in ops],['git_diff_check','git_diff_stat','git_diff_names','git_diff_patch'])
+        self.assertEqual(ops[0].cwd,'/invented/repo with spaces')
+        self.assertEqual(self.labels('git -C "repo with spaces" diff --check'),['git_diff_check'])
+        self.assertEqual(self.labels('rg --files | head -20'),['find_related_files'])
+
+    def test_opaque_constructs_and_mutations_stay_boundaries(self):
+        for command in ('echo $(cat source)','pytest > output','python - <<EOF\nprint(1)\nEOF','git push','cat input | tee output'):
+            self.assertIn('unknown',self.labels(command))
+        self.assertEqual(self.labels('python -c "print(1)\ngit diff"'),['unknown'])
+        self.assertEqual(self.labels('git status || pytest tests/a.py'),['git_status','unknown','run_tests'])
+        self.assertEqual(self.labels('pytest --collect-only'),['inspection'])
+
+    def test_wrapper_literals_cannot_smuggle_fake_calls(self):
+        n=Normalizer()
+        for source in ('text("tools.exec_command({cmd: 1})")','// tools.exec_command({cmd: 1})\ntext(1)',
+                       'tools.exec_command({cmd: commandVariable})','tools.exec_command({cmd: `git diff ${revision}`})',
+                       'if (ready) tools.exec_command({cmd:"pytest"})','fetch("local-placeholder"); tools.exec_command({cmd:"pytest"})'):
+            self.assertEqual([o.kind for o in n.operations('functions.exec',{'input':source})],['unknown'])
+        valid='text(await tools.exec_command({cmd: "pytest tests/a.py", workdir: "/invented"}));'
+        self.assertEqual(n.operations('functions.exec',{'code':valid})[0].kind,'run_tests')
+        formatting='const results = await Promise.allSettled([tools.exec_command({cmd: \"pytest tests/a.py\"})]); for (let i=0; i<results.length; i++) text(results[i]);'
+        self.assertEqual(n.operations('functions.exec',{'input':formatting})[0].kind,'run_tests')
+        self.assertEqual(n.operations('write_stdin',{'session_id':1,'chars':'rm file\n'})[0].kind,'unknown')
+
+    def test_configured_matcher(self):
         with tempfile.TemporaryDirectory() as directory:
-            path = Path(directory) / "matchers.json"
-            path.write_text(json.dumps([{"action": "run_tests", "pattern": "^make check$"}]))
-            self.assertEqual(Normalizer(path).classify("Bash", "make check"), "run_tests")
+            p=Path(directory)/'matchers.json';p.write_text('[{"action":"run_tests","pattern":"^make check$"}]')
+            self.assertEqual(Normalizer(p).classify('Bash','make check'),'run_tests')
 
 
-def simple_sessions():
-    actions = [dict(category="git_diff", request=1, turn=1, output_tokens=1000, assistant_tokens=10, success=True),
-               dict(category="find_related_files", request=1, turn=2, output_tokens=500, assistant_tokens=30, success=True),
-               dict(category="run_tests", request=1, turn=3, output_tokens=300, assistant_tokens=40, success=True)]
-    return [dict(id=i, session_id=f"s{i}", source="claude", project=f"project-{i}", actions=copy.deepcopy(actions)) for i in (1, 2)]
+class ReducerTests(unittest.TestCase):
+    def test_status_contract_preserves_diagnostics_and_tail(self):
+        text='passed\n'*300+'WARNING: invented diagnostic\ncontext\n'+'passed\n'*30+'300 passed\n'
+        result=compact_validation(text,{'label':'run_tests'},True,True)
+        kept='\n'.join(result['summary']['diagnostics_and_tail'])
+        self.assertIn('WARNING: invented diagnostic',kept);self.assertIn('context',kept);self.assertIn('300 passed',kept)
+        self.assertLess(result['tokens'],estimate_tokens(text))
+        self.assertTrue(result['summary']['full_log_available_on_request'])
 
+    def test_conflicting_failure_text_is_not_summarized(self):
+        self.assertIsNone(compact_validation('passed\n'*300+'FAILED invented test', {'label':'run_tests'},True,True))
+        self.assertIs(result_metadata('Exit code 1\nFAILED',False)[0],False)
 
-class MiningTests(unittest.TestCase):
-    def test_aggregation_scores_and_closed_sequences(self):
-        result = mine(simple_sessions())
-        self.assertEqual(len(result), 1)
-        candidate, spans = result[0]
-        self.assertEqual(candidate["name"], "validate_changed_files")
-        self.assertEqual(candidate["occurrences"], 2)
-        self.assertEqual(candidate["project_count"], 2)
-        self.assertEqual(candidate["average_model_turns"], 3)
-        self.assertEqual(candidate["average_intermediate_tokens"], 1570)
-        self.assertEqual(candidate["average_tool_output_tokens"], 1800)
-        self.assertEqual(candidate["estimated_historical_avoidable_tokens"], 2740)
-        self.assertEqual(candidate["score"], 2740)
-        self.assertEqual(candidate["outcomes"], {"success": 2, "failure": 0, "unknown": 0})
-        self.assertEqual(spans, [(1, 0, 2), (2, 0, 2)])
-
-    def test_no_cross_request_unknown_or_session_stitching(self):
-        for alteration in ("request", "unknown"):
-            sessions = simple_sessions()
-            for session in sessions:
-                if alteration == "request":
-                    session["actions"][1]["request"] = 2
-                else:
-                    session["actions"][1]["category"] = "unknown"
-            self.assertEqual(mine(sessions), [])
-        sessions = simple_sessions()
-        sessions[0]["actions"] = sessions[0]["actions"][:1]
-        sessions[1]["actions"] = sessions[1]["actions"][1:]
-        self.assertEqual(mine(sessions), [])
-
-    def test_failure_unknown_and_distinct_sessions(self):
-        sessions = simple_sessions()
-        sessions[0]["actions"][2]["success"] = False
-        sessions[1]["actions"][2]["success"] = None
-        candidate = mine(sessions)[0][0]
-        self.assertEqual(candidate["outcomes"], {"failure": 1, "unknown": 1, "success": 0})
-        sessions[1]["session_id"] = sessions[0]["session_id"]
-        self.assertEqual(mine(sessions), [])
-
-    def test_nonoverlap_and_more_frequent_subpatterns(self):
-        sessions = simple_sessions()
-        sessions[0]["actions"] += copy.deepcopy(sessions[0]["actions"][:2])
-        result = mine(sessions)
-        self.assertEqual({tuple(c["sequence"]): c["occurrences"] for c, _ in result}, {
-            ("git_diff", "find_related_files", "run_tests"): 2,
-            ("git_diff", "find_related_files"): 3})
-        for session in sessions:
-            session["actions"] = [dict(session["actions"][0], category="read_file") for _ in range(5)]
-        pair = next(c for c, _ in mine(sessions, keep_nested=True) if len(c["sequence"]) == 2)
-        self.assertEqual(pair["occurrences"], 4)
-
-    def test_expensive_fewer_occurrences_outrank_cheap(self):
-        sessions = simple_sessions()
-        for i in range(3, 13):
-            session = copy.deepcopy(sessions[0])
-            session.update(id=i, session_id=f"s{i}")
-            for action in session["actions"]:
-                action.update(category="read_file", output_tokens=1, assistant_tokens=1)
-            sessions.append(session)
-        result = mine(sessions)
-        self.assertEqual(result[0][0]["name"], "validate_changed_files")
-        self.assertEqual(result[0][0]["occurrences"], 2)
+    def test_failed_incomplete_and_source_outputs_are_never_compressed(self):
+        for label,success,complete in [('run_tests',False,True),('build',True,False),('read_file',True,True),('git_diff_patch',True,True)]:
+            self.assertIsNone(compact_validation('text\n'*500,{'label':label},success,complete))
 
 
 class StorageTests(unittest.TestCase):
     def setUp(self):
-        self.temporary = tempfile.TemporaryDirectory()
-        self.addCleanup(self.temporary.cleanup)
-        self.directory = Path(self.temporary.name)
-        self.source = self.directory / "input"
-        shutil.copytree(FIXTURES, self.source)
-        self.database = self.directory / "private" / "miner.sqlite3"
+        self.temp=tempfile.TemporaryDirectory();self.addCleanup(self.temp.cleanup)
+        self.root=Path(self.temp.name);self.source=self.root/'input';shutil.copytree(FIXTURES,self.source)
+        self.database=self.root/'miner.sqlite3'
 
-    def test_incremental_scan_refresh_and_stale_candidate_invalidation(self):
+    def test_incremental_scan_invalidates_derived_results(self):
         with connect(self.database) as db:
-            first = scan(db, [self.source])
-            self.assertEqual(first["imported"], 4)
-            self.assertEqual(first["actions"], 12)
-            candidate = analyse(db)[0]
-            self.assertEqual(candidate["occurrences"], 4)
-            self.assertEqual(candidate["session_count"], 4)
-            self.assertEqual(candidate["project_count"], 2)
-            self.assertEqual(scan(db, [self.source])["unchanged"], 4)
-            self.assertEqual(db.execute("SELECT count(*) FROM actions").fetchone()[0], 12)
-            self.assertEqual(len(candidates(db)), 1)
-            path = self.source / "claude-a.json"
-            rows = json.loads(path.read_text())
-            rows[2]["message"]["content"][1]["input"]["command"] = "unrecognized-task"
-            path.write_text(json.dumps(rows))
-            self.assertEqual(scan(db, [self.source])["imported"], 1)
-            self.assertEqual(candidates(db), [])
-            self.assertEqual(db.execute("SELECT count(*) FROM actions").fetchone()[0], 12)
-            self.assertEqual(analyse(db)[0]["occurrences"], 3)
-        self.assertEqual(stat.S_IMODE(self.database.stat().st_mode), 0o600)
+            self.assertEqual(scan(db,[self.source])['actions'],12)
+            self.assertTrue(analyse(db));self.assertEqual(scan(db,[self.source])['unchanged'],4)
+            self.assertEqual(db.execute('select count(*) from actions').fetchone()[0],12)
+            p=self.source/'claude-a.json';rows=json.loads(p.read_text());rows[2]['message']['content'][1]['input']['command']='opaque-task';p.write_text(json.dumps(rows))
+            self.assertEqual(scan(db,[self.source])['imported'],1);self.assertEqual(candidates(db),[])
+            self.assertEqual(db.execute('select count(*) from actions').fetchone()[0],12)
+        self.assertEqual(stat.S_IMODE(self.database.stat().st_mode),0o600)
 
-    def test_content_duplicate_unsupported_and_matcher_reclassification(self):
-        shutil.copyfile(self.source / "claude-a.json", self.source / "copy.json")
-        (self.source / "history.jsonl").write_text('{"display":"Only a prompt", "sessionId":"history"}\n')
+    def test_duplicates_unsupported_indexes_and_config_changes(self):
+        shutil.copyfile(self.source/'claude-a.json',self.source/'copy.json')
+        (self.source/'index.jsonl').write_text('{"display":"Invented prompt only"}\n')
         with connect(self.database) as db:
-            summary = scan(db, [self.source])
-            self.assertEqual(summary["duplicates"], 1)
-            self.assertEqual(summary["unsupported"], 1)
-            self.assertEqual(summary["imported"], 4)
-            matcher = self.directory / "matchers.json"
-            matcher.write_text('[{"action":"custom_diff","pattern":"^git diff"}]')
-            scan(db, [self.source], matchers=matcher)
-            self.assertEqual(db.execute("SELECT count(*) FROM actions WHERE category='custom_diff'").fetchone()[0], 4)
+            result=scan(db,[self.source]);self.assertEqual(result['duplicates'],1);self.assertEqual(result['unsupported'],1)
+            self.assertEqual(scan(db,[self.source])['unchanged'],6)
+            matcher=self.root/'matchers.json';matcher.write_text('[{"action":"custom_test","pattern":"^pytest"}]')
+            scan(db,[self.source],matchers=matcher)
+            self.assertEqual(db.execute("select count(*) from actions where category='custom_test'").fetchone()[0],4)
 
-    def test_exports_are_bounded_structured_and_redacted(self):
+    def test_database_path_cannot_modify_a_transcript(self):
+        p=self.root/'private.jsonl';p.write_text('{"invented":true}\n');p.chmod(0o640)
+        before=p.read_bytes()
+        with self.assertRaises(ValueError):
+            with connect(p):pass
+        self.assertEqual(p.read_bytes(),before);self.assertEqual(stat.S_IMODE(p.stat().st_mode),0o640)
+
+    def test_report_has_deduplicated_counterfactual_accounting(self):
         with connect(self.database) as db:
-            scan(db, [self.source])
-            candidate_id = analyse(db)[0]["id"]
-            candidate = get_candidate(db, candidate_id)
-            self.assertEqual(len(candidate["examples"]), 3)
-            candidate["examples"][0]["actions"][0]["command"] = "TOKEN=synthetic-secret git -C /Users/invented/repo diff"
-            bundle = package(candidate)
-            text = json.dumps(bundle)
-            self.assertNotIn("synthetic-secret", text)
-            self.assertNotIn("/Users/invented", text)
-            self.assertNotIn(str(self.source), text)
-            self.assertNotIn("raw_arguments", text)
-            self.assertEqual(bundle["schema_version"], 1)
-            self.assertIn("untrusted data", bundle["generation_prompt"])
-            self.assertIn("Historical avoidable tokens (estimated)", markdown(bundle))
-            self.assertIn("synthetic-secret", json.dumps(package(candidate, include_sensitive=True)))
+            scan(db,[self.source]);rows=analyse(db);report=corpus_report(db)
+            self.assertGreater(report['estimated_tool_output_tokens_avoided'],1000)
+            self.assertEqual(report['credited_results'],4)
+            self.assertEqual(report['estimated_tool_output_tokens_avoided'],sum(t['estimated_tokens_avoided'] for t in report['by_tool']))
+            self.assertEqual(report['observed_tool_output_tokens']-report['estimated_tool_output_tokens_with_tools'],report['estimated_tool_output_tokens_avoided'])
+            self.assertGreater(sum(c['modeled_tool_output_reduction_tokens'] for c in rows),report['estimated_tool_output_tokens_avoided'])
+            self.assertIsNone(report['measured_billing_savings'])
+
+    def test_export_retains_evidence_without_raw_identifiers_by_default(self):
+        with connect(self.database) as db:
+            scan(db,[self.source]);identifier=analyse(db)[0]['id'];candidate=get_candidate(db,identifier)
+            self.assertEqual(len(candidate['examples']),3)
+            candidate['examples'][0]['actions'][0]['command']='TOKEN=invented-secret git -C /Users/invented/repo diff'
+            bundle=package(candidate);text=json.dumps(bundle)
+            self.assertNotIn('invented-secret',text);self.assertNotIn('/Users/invented',text)
+            self.assertNotIn(str(self.source),text);self.assertNotIn('raw_arguments',text)
+            self.assertEqual(bundle['schema_version'],2);self.assertIn('untrusted data',bundle['generation_prompt'])
+            self.assertIn('not measured',markdown(bundle))
+            self.assertIn('invented-secret',json.dumps(package(candidate,True)))
+
+    def test_mining_memory_does_not_load_large_raw_payloads(self):
+        with connect(self.database) as db:
+            scan(db,[self.source])
+            # Large cold payloads must not enter the mining working set.
+            db.execute('update actions set data=?',(json.dumps({'unused_raw_argument':'x'*2_000_000}),));db.commit()
+            tracemalloc.start()
+            try:
+                self.assertTrue(analyse(db));peak=tracemalloc.get_traced_memory()[1]
+            finally:tracemalloc.stop()
+            self.assertLess(peak,3_000_000)
+
+    def test_git_worktrees_share_repository_identity(self):
+        repo=self.root/'repo';repo.mkdir();(repo/'.git').mkdir();work=repo/'.git'/'worktrees'/'one';work.mkdir(parents=True);(work/'commondir').write_text('../..')
+        checkout=self.root/'checkout';checkout.mkdir();(checkout/'.git').write_text(f'gitdir: {work}')
+        project_identity.cache_clear()
+        self.assertEqual(project_identity(str(repo)),project_identity(str(checkout)))
+
+    def test_v1_migration_preserves_raw_actions_and_requires_rescan(self):
+        from transcript_tool_miner.storage import SCHEMA
+        db=sqlite3.connect(self.database);db.executescript(SCHEMA)
+        db.execute('pragma user_version=1')
+        db.execute("insert into sessions values(1,?,0,0,'old','1:builtin:None','old','claude','/invented','','[]','[]')",(str((self.source/'claude-a.json').resolve()),))
+        db.execute("insert into actions values(1,1,0,'read_file','{}')");db.commit();db.close()
+        with connect(self.database) as db:
+            self.assertEqual(db.execute('select data from actions').fetchone()[0],'{}')
+            with self.assertRaisesRegex(ValueError,'v1 actions'):analyse(db)
+            scan(db,[self.source]);self.assertTrue(analyse(db))
 
 
 class CliAcceptanceTests(unittest.TestCase):
-    def cli(self, cwd, *args, success=True):
-        environment = dict(os.environ, PYTHONPATH=str(ROOT / "src"), HOME=str(cwd / "isolated-home"), CODEX_HOME=str(cwd / "isolated-codex"), CLAUDE_CONFIG_DIR=str(cwd / "isolated-claude"))
-        result = subprocess.run([sys.executable, "-m", "transcript_tool_miner", *args], cwd=cwd, env=environment, capture_output=True, text=True)
-        if success:
-            self.assertEqual(result.returncode, 0, result.stderr)
-        else:
-            self.assertNotEqual(result.returncode, 0)
+    def cli(self,cwd,*args,success=True):
+        env=dict(os.environ,PYTHONPATH=str(ROOT/'src'),HOME=str(cwd/'isolated-home'),CODEX_HOME=str(cwd/'isolated-codex'),CLAUDE_CONFIG_DIR=str(cwd/'isolated-claude'))
+        result=subprocess.run([sys.executable,'-m','transcript_tool_miner',*args],cwd=cwd,env=env,capture_output=True,text=True)
+        if success:self.assertEqual(result.returncode,0,result.stderr)
+        else:self.assertNotEqual(result.returncode,0)
         return result
 
-    def test_end_to_end_scan_analyse_list_show_export(self):
+    def test_cli_scan_analyse_candidates_export_and_corpus_report(self):
         with tempfile.TemporaryDirectory() as directory:
-            cwd = Path(directory)
-            self.cli(cwd, "scan", str(FIXTURES))
-            self.cli(cwd, "analyse")
-            rows = json.loads(self.cli(cwd, "candidates", "--json").stdout)
-            self.assertEqual(len(rows), 1)
-            self.assertEqual(rows[0]["occurrences"], 4)
-            self.assertEqual(rows[0]["sequence"], ["git_diff", "find_related_files", "run_tests"])
-            self.assertGreater(rows[0]["score"], 0)
-            identifier = rows[0]["id"]
-            self.assertIn("validate_changed_files", self.cli(cwd, "candidate", "show", identifier).stdout)
-            destination = cwd / "exports" / "candidate.json"
-            self.cli(cwd, "candidate", "export", identifier, "--format", "json", "--output", str(destination))
-            self.assertEqual(json.loads(destination.read_text())["candidate"]["id"], identifier)
-            self.assertEqual(stat.S_IMODE(destination.stat().st_mode), 0o600)
-            self.cli(cwd, "candidate", "export", identifier, "--output", str(destination), success=False)
-            repeat = json.loads(self.cli(cwd, "scan", str(FIXTURES), "--json").stdout)
-            self.assertEqual(repeat["unchanged"], 4)
+            cwd=Path(directory);self.cli(cwd,'scan',str(FIXTURES),'--workers','2');self.cli(cwd,'analyse')
+            rows=json.loads(self.cli(cwd,'candidates','--json').stdout)
+            self.assertTrue(rows)
+            self.assertEqual(rows[0]['name'],'validate_and_report');self.assertEqual(rows[0]['occurrences'],4)
+            identifier=rows[0]['id'];self.assertIn('not measured',self.cli(cwd,'candidate','show',identifier).stdout)
+            target=cwd/'exports'/'candidate.json'
+            self.cli(cwd,'candidate','export',identifier,'--format','json','-o',str(target))
+            self.assertEqual(json.loads(target.read_text())['candidate']['id'],identifier)
+            self.assertEqual(stat.S_IMODE(target.stat().st_mode),0o600)
+            self.cli(cwd,'candidate','export',identifier,'-o',str(target),success=False)
+            report=json.loads(self.cli(cwd,'report','--format','json').stdout)
+            self.assertEqual(report['credited_results'],4)
+            self.assertGreater(report['estimated_tool_output_tokens_avoided'],1000)
+            self.assertEqual(json.loads(self.cli(cwd,'scan',str(FIXTURES),'--json').stdout)['unchanged'],4)
 
-    def test_default_provider_discovery_stays_in_isolated_roots(self):
+    def test_default_discovery_and_database_option_positions(self):
         with tempfile.TemporaryDirectory() as directory:
-            cwd = Path(directory)
-            for folder, provider in (("isolated-claude/projects/demo", "claude"), ("isolated-codex/sessions/demo", "codex")):
-                target = cwd / folder
-                target.mkdir(parents=True)
-                records = json.loads((FIXTURES / f"{provider}-a.json").read_text())
-                (target / "invented.jsonl").write_text("\n".join(json.dumps(row) for row in records))
-            first = json.loads(self.cli(cwd, "scan", "--claude", "--json").stdout)
-            second = json.loads(self.cli(cwd, "scan", "--codex", "--json").stdout)
-            self.assertEqual(first["imported"], 1)
-            self.assertEqual(second["imported"], 1)
-            self.cli(cwd, "analyse")
-            rows = json.loads(self.cli(cwd, "candidates", "--json").stdout)
-            self.assertEqual(rows[0]["occurrences"], 2)
+            cwd=Path(directory)
+            for provider,folder in [('claude','isolated-claude/projects/demo'),('codex','isolated-codex/sessions/demo')]:
+                target=cwd/folder;target.mkdir(parents=True);shutil.copyfile(FIXTURES/f'{provider}-a.json',target/'invented.json')
+            db=str(cwd/'other.sqlite3')
+            self.cli(cwd,'--db',db,'scan','--claude');self.cli(cwd,'scan','--codex','--db',db)
+            self.cli(cwd,'analyse','--db',db)
+            self.assertEqual(json.loads(self.cli(cwd,'candidates','--db',db,'--json').stdout)[0]['occurrences'],2)
+            self.cli(cwd,'scan',str(cwd/'missing'),success=False)
+            self.cli(cwd,'analyse','--min-length','11',success=False)
+            self.cli(cwd,'candidate','show','missing',success=False)
 
-    def test_error_paths_and_database_option_positions(self):
-        with tempfile.TemporaryDirectory() as directory:
-            cwd = Path(directory)
-            self.cli(cwd, "scan", str(cwd / "missing"), success=False)
-            self.cli(cwd, "scan", success=False)
-            self.cli(cwd, "analyse", "--min-length", "11", success=False)
-            self.cli(cwd, "candidate", "show", "missing", success=False)
-            db = str(cwd / "alternative.sqlite3")
-            self.cli(cwd, "--db", db, "scan", str(FIXTURES))
-            self.cli(cwd, "analyse", "--db", db)
-            self.assertEqual(len(json.loads(self.cli(cwd, "candidates", "--db", db, "--json").stdout)), 1)
-
-
-if __name__ == "__main__":
-    unittest.main()
+if __name__=='__main__':unittest.main()

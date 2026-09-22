@@ -45,7 +45,7 @@ def package(candidate, include_sensitive=False):
         data = json.loads(json.dumps(data))
     data["examples"] = examples
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "purpose": "Optional coding-model uplift; no model call has been made.",
         "privacy": "Review before sharing. Redaction is best effort; commands may still contain private code, paths or unknown secret formats.",
         "sensitive_metadata_included": include_sensitive,
@@ -55,25 +55,23 @@ def package(candidate, include_sensitive=False):
 
 
 def markdown(bundle):
-    c = bundle["candidate"]
-    s = c["score_components"]
-    lines = [f"# Candidate: {c['name']}", "", f"ID: `{c['id']}`", "",
-             f"Occurrences: {c['occurrences']} across {c['session_count']} sessions and {c['project_count']} known projects.",
+    c = bundle['candidate']; s = c['score_components']
+    lines = [f"# Candidate: {c['name']}", '', f"ID: `{c['id']}`", '',
+             f"Type: {c['opportunity_type']}",
+             f"Occurrences: {c['occurrences']} across {c['session_count']} sessions.",
+             f"Verified Git repositories: {c['project_count']}; unresolved working-directory identities: {c['unresolved_project_count']}.",
              f"Average model turns: {c['average_model_turns']}",
-             f"Average intermediate tokens (estimated): {c['average_intermediate_tokens']:,.0f}",
-             f"Average tool output tokens (estimated): {c['average_tool_output_tokens']:,.0f}",
-             f"Historical avoidable tokens (estimated): {c['estimated_historical_avoidable_tokens']:,}", "",
-             f"Score: {s['frequency']} × {s['estimated_avoidable_tokens_per_occurrence']:,.2f} × {s['repeatability']} = {c['score']:,.2f}",
-             f"Concise-result allowance: {s['concise_result_budget']} tokens per occurrence.",
-             c["repeatability_note"], c["estimates_note"], "", "## Observed workflow", ""]
-    lines += [f"{i}. {action}" for i, action in enumerate(c["sequence"], 1)]
-    lines += ["", "## Suggested deterministic boundary", "", c["deterministic_boundary"], "",
-              "Inputs: " + ", ".join(c["suggested_inputs"]), "Output: " + ", ".join(c["suggested_output"]),
-              "", "Outcomes: " + json.dumps(c["outcomes"]), "", "## Representative traces", ""]
-    # JSON strings escape control characters, and four-space indentation prevents
-    # transcript text from breaking out of a Markdown code fence.
-    for example in c["examples"]:
-        lines += ["    " + line for line in json.dumps(example, indent=2).splitlines()]
-        lines.append("")
-    lines += ["## Future model uplift", "", bundle["generation_prompt"], "", *c["review_notes"], "", bundle["privacy"], ""]
-    return "\n".join(lines)
+             f"Modelled tool-output reduction (estimated): {c['modeled_tool_output_reduction_tokens']:,} tokens.",
+             'Actual model/billing savings: not measured.', '',
+             f"Score: {s['eligible_occurrences']} × {s['average_replayed_output_reduction_tokens']:,.2f} × {s['cross_session_interface_recurrence']} = {c['score']:,.2f}",
+             'The recurrence factor measures parameterised interfaces observed in multiple sessions.',
+             c['estimates_note'], '', '## Observed variants', '']
+    lines += [f"- {' → '.join(v['sequence'])}: {v['occurrences']} occurrences" for v in c['variants']]
+    lines += ['', '## Proposed boundary', '', c['deterministic_boundary'], '',
+              'Inputs: ' + ', '.join(c['suggested_inputs']), 'Output: ' + ', '.join(c['suggested_output']),
+              '', 'Outcomes: ' + json.dumps(c['outcomes']), '', '## Representative traces', '']
+    for example in c['examples']:
+        lines += ['    ' + line for line in json.dumps(example, indent=2).splitlines()]
+        lines.append('')
+    lines += ['## Future model uplift', '', bundle['generation_prompt'], '', *c['review_notes'], '', bundle['privacy'], '']
+    return '\n'.join(lines)

@@ -5,9 +5,8 @@ from pathlib import Path
 
 def fixture(provider, suffix, project):
     rows = [{"_synthetic_fixture": True, "description": "Invented workflow. Contains no real transcript data."}]
-    commands = ["git diff --name-only " + ("HEAD" if suffix == "a" else "HEAD~1"),
-                "rg --files tests", "pytest tests/test_example.py"]
-    outputs = ["src/example.py\n" * 100, "tests/test_example.py\n" * 100, "2 passed in 0.1s"]
+    commands = ["pytest tests/test_example.py", "git status --short", "git diff --check"]
+    outputs = ["".join(f"test_example_{i} PASSED\n" for i in range(200)) + "200 passed in 1.0s\n", " M src/example.py\n", ""]
     if provider == "claude":
         rows.append({"type": "user", "sessionId": "synthetic-claude-" + suffix, "cwd": project,
                      "message": {"role": "user", "content": "Check the changed example files."}})
